@@ -7,30 +7,49 @@ export function render(root, s, ctx) {
   let start = null, timer = null;
   const big = el('div', 'big', '0:00.0');
   const go = el('button', 'btn', 'Start');
+  const boxes = {}, taps = {};
+  // Accepts m:ss, m:ss.s or plain seconds. Returns whole ms, or null if empty or unreadable.
+  function parseTime(v) {
+    v = String(v || '').trim();
+    if (!v) return null;
+    const m = /^(?:(\d+):)?(\d+(?:\.\d+)?)$/.exec(v);
+    if (!m) return NaN;
+    return Math.round(((m[1] ? Number(m[1]) * 60 : 0) + Number(m[2])) * 1000);
+  }
   go.onclick = () => {
-    if (s.teams.some(t => times[t.id] != null) && !confirm('Restart the race and clear the times?')) return;
+    if (s.teams.some(t => boxes[t.id].value.trim() !== '') && !confirm('Restart the race and clear the times?')) return;
     start = performance.now();
-    s.teams.forEach(t => { delete times[t.id]; });
+    s.teams.forEach(t => { boxes[t.id].value = ''; });
     clearInterval(timer); timer = setInterval(() => {
       if (!big.isConnected) { clearInterval(timer); return; }
       big.textContent = clock(performance.now() - start);
     }, 100);
-    draw();
+    sync();
   };
   const list = el('div');
-  function draw() {
-    list.innerHTML = '';
-    s.teams.forEach(t => {
-      const b = el('button', times[t.id] != null ? 'btn ghost' : 'btn', t.name + (times[t.id] != null ? ', ' + clock(times[t.id]) : ', tap when done'));
-      b.disabled = start == null || times[t.id] != null;
-      b.onclick = () => { times[t.id] = Math.round(performance.now() - start); if (s.teams.every(x => times[x.id] != null)) clearInterval(timer); draw(); };
-      const r = el('p'); r.append(b); list.append(r);
-    });
+  function sync() {
+    s.teams.forEach(t => { taps[t.id].disabled = start == null || boxes[t.id].value.trim() !== ''; });
+    if (start != null && s.teams.every(t => boxes[t.id].value.trim() !== '')) clearInterval(timer);
   }
-  draw();
+  s.teams.forEach(t => {
+    const box = el('input'); box.type = 'text'; box.inputMode = 'decimal'; box.placeholder = 'm:ss.s'; box.style.width = '90px';
+    if (times[t.id] != null) box.value = clock(times[t.id]);
+    box.oninput = sync;
+    const b = el('button', 'btn', 'Done');
+    b.onclick = () => { box.value = clock(Math.round(performance.now() - start)); sync(); };
+    boxes[t.id] = box; taps[t.id] = b;
+    const r = el('div', 'row'); r.append(el('strong', null, t.name), box, b); list.append(r);
+  });
+  sync();
   const save = el('button', 'btn', 'Save race result');
   save.onclick = async () => {
-    const results = s.teams.filter(t => times[t.id] != null).map(t => ({ team: t.id, ms: times[t.id] }));
+    const results = [];
+    for (const t of s.teams) {
+      const ms = parseTime(boxes[t.id].value);
+      if (Number.isNaN(ms)) { toast('Check the time for ' + t.name + '. Use m:ss or seconds.'); return; }
+      if (ms != null) results.push({ team: t.id, ms });
+    }
+    if (!results.length) { toast('Enter at least one team'); return; }
     if (results.length < s.teams.length && !confirm('Not every team has a time. Save anyway?')) return;
     if (await ctx.act('raceResult', { results })) toast('Race saved');
   };
