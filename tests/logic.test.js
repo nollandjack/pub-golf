@@ -74,3 +74,25 @@ test('finished level teams are tied until a tie-break order is set', () => {
 test('pokies bonus needs more than $0 (all-zero top means no winners)', () => {
   assert.deepEqual(j(L.pokiesWinners([{ team: 1, cents: 0 }, { team: 2, cents: 0 }])), []);
 });
+
+test('teams pair up to confirm each other', () => {
+  assert.deepEqual(j(L.confirmersFor(1, [1, 2, 3, 4])), [2]);
+  assert.deepEqual(j(L.confirmersFor(2, [1, 2, 3, 4])), [1]);
+  assert.deepEqual(j(L.confirmersFor(4, [1, 2, 3, 4])), [3]);
+});
+
+test('an odd number of teams puts the last three in a ring', () => {
+  const ids = [1, 2, 3, 4, 5];
+  assert.deepEqual(j(L.confirmersFor(1, ids)), [2]);
+  // ring is 3, 4, 5. 3 watches 4, 4 watches 5, 5 watches 3
+  assert.deepEqual(j(L.confirmersFor(4, ids)), [3]);
+  assert.deepEqual(j(L.confirmersFor(5, ids)), [4]);
+  assert.deepEqual(j(L.confirmersFor(3, ids)), [5]);
+  assert.deepEqual(j(L.confirmersFor(1, [1])), []);
+});
+
+test('cards with one-sip pints or identical sips get flagged', () => {
+  assert.deepEqual(j(L.cardFlags({ Ava: { sips: 1 }, Ben: { sips: 4 } }, 3)), ['Ava finished in one sip']);
+  assert.deepEqual(j(L.cardFlags({ Ava: { sips: 1 } }, 1)), []);
+  assert.deepEqual(j(L.cardFlags({ A: { sips: 3 }, B: { sips: 3 }, C: { sips: 3 }, D: { missed: true } }, 3)), ['Everyone has the same sips']);
+});

@@ -78,3 +78,24 @@ function leaderboard(d) {
   rows.forEach(r => { r.tied = rows.filter(x => x.rank === r.rank).length > 1; });
   return rows;
 }
+
+function confirmersFor(teamId, teamIds) {
+  const ids = teamIds.slice().sort((a, b) => a - b);
+  const i = ids.indexOf(teamId);
+  if (i < 0 || ids.length < 2) return [];
+  const ringStart = ids.length % 2 === 1 && ids.length >= 3 ? ids.length - 3 : ids.length;
+  if (i >= ringStart) {
+    const ring = ids.slice(ringStart);
+    return [ring[(i - ringStart + 2) % 3]];
+  }
+  return [ids[i % 2 === 0 ? i + 1 : i - 1]];
+}
+
+function cardFlags(scores, par) {
+  const flags = [];
+  const played = Object.keys(scores).filter(n => !scores[n].missed);
+  played.forEach(n => { if (Number(scores[n].sips) === 1 && par >= 3) flags.push(n + ' finished in one sip'); });
+  const sips = played.map(n => Number(scores[n].sips));
+  if (sips.length >= 3 && sips.every(s => s === sips[0])) flags.push('Everyone has the same sips');
+  return flags;
+}
