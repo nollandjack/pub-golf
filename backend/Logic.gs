@@ -37,11 +37,24 @@ function worstOnHole(cards, hole) {
   return worst;
 }
 
-// Teams that did not finish are left out. Ties share a place.
+// Teams that did not finish, or have no time yet, are left out. Ties share a place.
 function raceRanks(rows) {
   const out = {};
-  const ranked = rows.filter(r => !r.dnf);
+  const ranked = rows.filter(r => !r.dnf && r.ms != null);
   ranked.forEach(r => { out[r.team] = 1 + ranked.filter(x => x.ms < r.ms).length; });
+  return out;
+}
+
+var RULE_DEFAULTS = { missedExtra: 5, raceFirst: -2, raceStep: 2, raceDnf: 15, pokiesBonus: 3 };
+
+// One place that turns raw Settings values into numbers, so the board and the Rules page agree.
+function ruleSettings(raw) {
+  const out = {};
+  Object.keys(RULE_DEFAULTS).forEach(k => {
+    const v = raw ? raw[k] : undefined;
+    const n = v === undefined || v === null || v === '' ? NaN : Number(v);
+    out[k] = isFinite(n) ? n : RULE_DEFAULTS[k];
+  });
   return out;
 }
 
@@ -63,10 +76,9 @@ function rosterOf(people, teamId) {
 
 function leaderboard(d) {
   const st = d.settings;
-  const num = (v, def) => (v === undefined || v === null || v === '' || isNaN(Number(v)) ? def : Number(v));
-  const rs = { raceFirst: num(st.raceFirst, -2), raceStep: num(st.raceStep, 2), raceDnf: num(st.raceDnf, 15) };
-  const missedExtra = num(st.missedExtra, 5);
-  const bonus = num(st.pokiesBonus, 3);
+  const rs = ruleSettings(st);
+  const missedExtra = rs.missedExtra;
+  const bonus = rs.pokiesBonus;
   const order = st.tiebreakOrder || [];
   const ranks = raceRanks(d.race);
   const winners = pokiesWinners(d.pokies);

@@ -54,6 +54,31 @@ test('race ranks skip DNF rows', () => {
   assert.deepEqual(r, { 1: 2, 3: 1 });
 });
 
+test('race ranks skip a row with no time that is not DNF', () => {
+  const r = j(L.raceRanks([{ team: 1, ms: null, dnf: false }, { team: 2, ms: 8000, dnf: false }]));
+  assert.deepEqual(r, { 2: 1 });
+});
+
+test('ruleSettings gives numbers and defaults', () => {
+  assert.deepEqual(j(L.ruleSettings({ raceDnf: '+3', missedExtra: 'abc', raceFirst: '' })), { missedExtra: 5, raceFirst: -2, raceStep: 2, raceDnf: 3, pokiesBonus: 3 });
+  assert.equal(L.ruleSettings({}).raceDnf, 15);
+});
+
+test('the board DNF score uses the same normalised settings', () => {
+  const race = [{ team: 1, ms: null, dnf: true }];
+  const raceHoles = [{ hole: 3, name: 'R', kind: 'race' }];
+  const b = L.leaderboard(base({ holes: raceHoles, race, settings: { raceDnf: '+3', tiebreakOrder: [] } }));
+  assert.equal(b.find(r => r.team === 1).byHole[3], 3);
+  const b2 = L.leaderboard(base({ holes: raceHoles, race, settings: { raceDnf: 'abc', tiebreakOrder: [] } }));
+  assert.equal(b2.find(r => r.team === 1).byHole[3], 15);
+});
+
+test('a no-time non-DNF race row scores nothing on the board', () => {
+  const raceHoles = [{ hole: 3, name: 'R', kind: 'race' }];
+  const b = L.leaderboard(base({ holes: raceHoles, race: [{ team: 1, ms: null, dnf: false }], settings: SETTINGS }));
+  assert.equal(b.find(r => r.team === 1).played, 0);
+});
+
 test('race score is the ladder, or the DNF score', () => {
   const s = { raceFirst: -2, raceStep: 2, raceDnf: 15 };
   assert.equal(L.raceScore({ team: 1, ms: 1 }, 1, s), -2);

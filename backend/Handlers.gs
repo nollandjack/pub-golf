@@ -45,16 +45,9 @@ function canConfirm_(d, who, card) {
   return confirmersFor(card.team, d.teams.map(t => t.id)).indexOf(who.team) >= 0;
 }
 
-var SETTING_DEFAULTS = { missedExtra: 5, raceFirst: -2, raceStep: 2, raceDnf: 15, pokiesBonus: 3 };
-
-// Numbers only, so a blank or bad Sheet value falls back to the default instead of reaching the page.
+// Numbers only, through the same normaliser the board uses.
 function publicSettings_(settings) {
-  const out = {};
-  Object.keys(SETTING_DEFAULTS).forEach(k => {
-    const v = settings[k];
-    out[k] = typeof v === 'number' && isFinite(v) ? v : SETTING_DEFAULTS[k];
-  });
-  return out;
+  return ruleSettings(settings);
 }
 
 function state_(d, who, store) {

@@ -156,6 +156,14 @@ test('state settings fall back to the defaults when the Settings rows are missin
   assert.deepEqual(get(store, '').settings, defaults);
 });
 
+test('state settings match the board for a string setting', () => {
+  const store = fresh();
+  store.replace('Settings', [{ key: 'raceDnf', value: '+3' }]);
+  assert.equal(get(store, '').settings.raceDnf, 3);
+  store.replace('Settings', [{ key: 'raceDnf', value: 'abc' }]);
+  assert.equal(get(store, '').settings.raceDnf, 15);
+});
+
 test('a missed player costs the worst real score on the hole plus 5', () => {
   const store = fresh();
   post(store, 'kcap1', 'submitCard', { hole: 1, scores: { Ava: { sips: 3 }, Ben: { sips: 4 }, Cal: { missed: true } } });
