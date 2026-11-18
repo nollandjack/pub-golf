@@ -27,10 +27,14 @@ http.createServer((req, res) => {
   }
   // Check the raw path before URL normalisation so /../x and /.git/config never reach the disk.
   let rawPath = '';
-  try { rawPath = decodeURIComponent(req.url.split('?')[0]); } catch (e) { rawPath = '\0'; }
+  let pathname = '';
+  try {
+    rawPath = decodeURIComponent(req.url.split('?')[0]);
+    pathname = decodeURIComponent(url.pathname);
+  } catch (e) { res.writeHead(400); res.end('Bad request'); return; }
   if (rawPath.split('/').some(s => s.startsWith('.'))) { res.writeHead(404); res.end('Not found'); return; }
-  const file = path.join(root, url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname));
+  const file = path.join(root, url.pathname === '/' ? 'index.html' : pathname);
   if (!file.startsWith(root + path.sep) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); res.end('Not found'); return; }
   res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream' });
   fs.createReadStream(file).pipe(res);
-}).listen(port, () => console.log('Pub golf dev server on http://localhost:' + port));
+}).listen(port, '127.0.0.1', () => console.log('Pub golf dev server on http://localhost:' + port));
