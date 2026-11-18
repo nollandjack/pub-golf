@@ -8,9 +8,13 @@ export function render(root, s, ctx) {
   const big = el('div', 'big', '0:00.0');
   const go = el('button', 'btn', 'Start');
   go.onclick = () => {
+    if (s.teams.some(t => times[t.id] != null) && !confirm('Restart the race and clear the times?')) return;
     start = performance.now();
     s.teams.forEach(t => { delete times[t.id]; });
-    clearInterval(timer); timer = setInterval(() => { big.textContent = clock(performance.now() - start); }, 100);
+    clearInterval(timer); timer = setInterval(() => {
+      if (!big.isConnected) { clearInterval(timer); return; }
+      big.textContent = clock(performance.now() - start);
+    }, 100);
     draw();
   };
   const list = el('div');
