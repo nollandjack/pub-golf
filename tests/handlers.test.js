@@ -147,6 +147,15 @@ test('state exposes the new settings and queue items carry the drink, not par', 
   assert.equal(q.drink, 'Premix');
 });
 
+test('state settings fall back to the defaults when the Settings rows are missing or bad', () => {
+  const store = fresh();
+  store.replace('Settings', [{ key: 'raceDnf', value: 'abc' }, { key: 'pokiesBonus', value: '' }]);
+  const defaults = { missedExtra: 5, raceFirst: -2, raceStep: 2, raceDnf: 15, pokiesBonus: 3 };
+  assert.deepEqual(get(store, '').settings, defaults);
+  store.replace('Settings', []);
+  assert.deepEqual(get(store, '').settings, defaults);
+});
+
 test('a missed player costs the worst real score on the hole plus 5', () => {
   const store = fresh();
   post(store, 'kcap1', 'submitCard', { hole: 1, scores: { Ava: { sips: 3 }, Ben: { sips: 4 }, Cal: { missed: true } } });

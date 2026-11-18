@@ -45,6 +45,18 @@ function canConfirm_(d, who, card) {
   return confirmersFor(card.team, d.teams.map(t => t.id)).indexOf(who.team) >= 0;
 }
 
+var SETTING_DEFAULTS = { missedExtra: 5, raceFirst: -2, raceStep: 2, raceDnf: 15, pokiesBonus: 3 };
+
+// Numbers only, so a blank or bad Sheet value falls back to the default instead of reaching the page.
+function publicSettings_(settings) {
+  const out = {};
+  Object.keys(SETTING_DEFAULTS).forEach(k => {
+    const v = settings[k];
+    out[k] = typeof v === 'number' && isFinite(v) ? v : SETTING_DEFAULTS[k];
+  });
+  return out;
+}
+
 function state_(d, who, store) {
   const board = leaderboard(d);
   const staff = who.role === 'admin' || who.role === 'ref';
@@ -54,7 +66,7 @@ function state_(d, who, store) {
   d.people.forEach(p => { if (p.photoId) faces[p.name] = store.photoUrl(p.photoId); });
   const s = {
     who: { role: who.role, team: who.team, person: who.person },
-    settings: { missedExtra: d.settings.missedExtra, raceFirst: d.settings.raceFirst, raceStep: d.settings.raceStep, raceDnf: d.settings.raceDnf, pokiesBonus: d.settings.pokiesBonus },
+    settings: publicSettings_(d.settings),
     holes: d.holes.map(h => Object.assign({}, h, { hazard: staff || h.hole <= reached ? h.hazard : (h.hazard ? 'hidden' : '') })),
     teams: d.teams.map(t => ({ id: t.id, name: t.name, captain: t.captain, members: rosterOf(d.people, t.id) })),
     faces,
