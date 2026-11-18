@@ -59,9 +59,16 @@ function draw(force) {
   const w = state.who;
   $('who').textContent = ROLE_NAMES[w.role] + (w.person ? ', ' + w.person : '');
   if (KEY && w.role === 'public') { $('who').textContent = 'That link has been switched off. Ask Jack for a new one.'; }
-  if (!force && !v.live) return;
-  const root = $('view'); root.innerHTML = '';
+  const live = v.live || (v.mod.liveWhen && v.mod.liveWhen(state));
+  if (!force && !live) return;
+  const root = $('view');
+  // Do not wipe a note or name box while someone is typing in it.
+  const a = document.activeElement;
+  if (!force && a && root.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+  const scrolls = Array.from(root.querySelectorAll('.scroll'), n => n.scrollLeft);
+  root.innerHTML = '';
   v.mod.render(root, state, ctx);
+  root.querySelectorAll('.scroll').forEach((n, i) => { if (scrolls[i]) n.scrollLeft = scrolls[i]; });
 }
 
 async function load() {
