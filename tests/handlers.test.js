@@ -220,3 +220,38 @@ test('saving teams switches off old team and captain links until codes are made 
   assert.equal(active.filter(c => c.role === 'team').length, 4);
   assert.equal(active.filter(c => c.role === 'captain').length, 4);
 });
+
+test('an empty race or pokies list is refused', () => {
+  const store = fresh();
+  assert.equal(post(store, 'kref', 'raceResult', { results: [] }).error, 'Enter at least one team');
+  assert.equal(post(store, 'kref', 'pokiesResult', {}).error, 'Enter at least one team');
+});
+
+test('a team with no members gets a clear error', () => {
+  const store = fresh();
+  assert.equal(post(store, 'kadmin', 'saveTeams', { teams: [{ name: 'X', captain: 'Ava' }] }).error, 'Every team needs at least one player');
+});
+
+test('a Sheet that returns every value as text still works', () => {
+  const seedData = seed();
+  const str = v => (v === '' || v == null ? v : String(v));
+  const asText = {};
+  Object.keys(seedData).forEach(t => {
+    asText[t] = seedData[t].map(r => {
+      const o = {};
+      Object.keys(r).forEach(k => { o[k] = typeof r[k] === 'boolean' ? (r[k] ? 'TRUE' : 'FALSE') : str(r[k]); });
+      return o;
+    });
+  });
+  const store = memoryStore(asText);
+  const cap = get(store, 'kcap1');
+  assert.equal(cap.who.role, 'captain');
+  assert.equal(cap.who.team, 1);
+  assert.equal(cap.mine.nextHole, 1);
+  assert.equal(post(store, 'kcap1', 'submitCard', { hole: 1, scores: scores(T1, 3) }).ok, true);
+  const q = get(store, 'kcap2').queue;
+  assert.equal(q.length, 1);
+  assert.equal(post(store, 'kcap2', 'confirmCard', { cardId: q[0].id }).ok, true);
+  assert.equal(get(store, '').board.find(r => r.team === 1).byHole[1], 3);
+  assert.equal(post(store, 'kref', 'pokiesResult', { results: [{ team: '1', cents: '500' }] }).ok, true);
+});

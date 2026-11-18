@@ -13,6 +13,6 @@ function doPost(e) {
   try { req = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: 'Bad request' }); }
   req.method = 'POST';
   const lock = LockService.getScriptLock();
-  lock.waitLock(15000);
+  if (!lock.tryLock(20000)) return json_({ ok: false, error: 'Busy, try again' });
   try { return json_(handle(req, sheetStore_(), Date.now())); } finally { lock.releaseLock(); }
 }

@@ -199,6 +199,7 @@ ACTIONS.renameTeam = function (req, d, who, store) {
 // Boat race and pokies results. Refs or Jack only. Each post replaces the whole tab.
 function teamResults_(req, d, field) {
   const rows = [];
+  if (!(req.results || []).length) return { error: 'Enter at least one team' };
   for (const r of (req.results || [])) {
     const team = Number(r.team), v = Number(r[field]);
     if (!d.teams.some(t => t.id === team)) return { error: 'Unknown team ' + r.team };
@@ -263,6 +264,8 @@ ACTIONS.saveTeams = function (req, d, who, store) {
   const teams = req.teams || [];
   for (const t of teams) {
     if (!clean_(t.name, 30)) return { error: 'Every team needs a name' };
+    t.members = t.members || [];
+    if (!t.members.length) return { error: 'Every team needs at least one player' };
     if ((t.members || []).indexOf(t.captain) < 0) return { error: 'The captain of ' + t.name + ' must be on that team' };
     for (const m of t.members) {
       if (players.indexOf(m) < 0) return { error: m + ' is not a player on the list' };
