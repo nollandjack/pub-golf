@@ -275,6 +275,8 @@ ACTIONS.saveTeams = function (req, d, who, store) {
     const i = teams.findIndex(t => t.members.indexOf(name) >= 0);
     store.update('People', r => r.name === name, { team: i < 0 ? '' : i + 1 });
   });
+  // Team ids were renumbered, so old team and captain links could point at the wrong team. Jack makes new ones with makeCodes.
+  store.update('Codes', r => r.role === 'team' || r.role === 'captain', { active: false });
 };
 
 ACTIONS.makeCodes = function (req, d, who, store) {

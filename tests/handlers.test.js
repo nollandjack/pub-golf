@@ -192,3 +192,31 @@ test('admin sets the tie-break order', () => {
   assert.deepEqual(get(store, 'kadmin').admin.settings.tiebreakOrder, [3, 1]);
   assert.match(post(store, 'kcap1', 'tiebreak', { order: [1] }).error, /Only Jack/);
 });
+
+test('saving teams with a new captain makes one active captain code for the new captain', () => {
+  const store = fresh();
+  const teams = [
+    { name: 'Team 1', captain: 'Ben', members: ['Ava', 'Ben', 'Cal'] },
+    { name: 'Team 2', captain: 'Dee', members: ['Dee', 'Eli', 'Fay'] },
+    { name: 'Team 3', captain: 'Gus', members: ['Gus', 'Hal', 'Ivy'] },
+    { name: 'Team 4', captain: 'Jo', members: ['Jo', 'Kit', 'Lou'] }
+  ];
+  assert.equal(post(store, 'kadmin', 'saveTeams', { teams }).ok, true);
+  assert.equal(post(store, 'kadmin', 'makeCodes', {}).ok, true);
+  const caps = get(store, 'kadmin').admin.codes.filter(c => c.active && c.role === 'captain' && c.team === 1);
+  assert.equal(caps.length, 1);
+  assert.equal(caps[0].person, 'Ben');
+  assert.equal(get(store, 'kcap1').who.role, 'public');
+});
+
+test('saving teams switches off old team and captain links until codes are made again', () => {
+  const store = fresh();
+  const teams = [1, 2, 3, 4].map(i => ({ name: 'Team ' + i, captain: ['Ava', 'Dee', 'Gus', 'Jo'][i - 1], members: [['Ava', 'Ben', 'Cal'], ['Dee', 'Eli', 'Fay'], ['Gus', 'Hal', 'Ivy'], ['Jo', 'Kit', 'Lou']][i - 1] }));
+  assert.equal(post(store, 'kadmin', 'saveTeams', { teams }).ok, true);
+  assert.equal(get(store, 'kteam1').who.role, 'public');
+  assert.equal(get(store, 'kcap1').who.role, 'public');
+  assert.equal(post(store, 'kadmin', 'makeCodes', {}).ok, true);
+  const active = get(store, 'kadmin').admin.codes.filter(c => c.active);
+  assert.equal(active.filter(c => c.role === 'team').length, 4);
+  assert.equal(active.filter(c => c.role === 'captain').length, 4);
+});
