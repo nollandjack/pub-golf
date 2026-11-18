@@ -3,6 +3,15 @@ import { el, face, fileToJpeg, toast } from './ui.js';
 const PENS = [['spill', 'Spill +1'], ['toilet', 'Toilet +2'], ['unfinished', 'Unfinished +3'], ['chuck', 'Chuck +5']];
 const HAZ = { 'wrong-hand': ['slip', 'Slip +1'], silent: ['word', 'Word +1'] };
 
+// True when the entry form is showing. The poll must not redraw it. Any other state redraws on each poll.
+export function liveWhen(s) {
+  const m = s.mine;
+  if (!m || m.nextHole == null) return true;
+  const hole = s.holes.find(h => h.hole === m.nextHole);
+  if (!hole || hole.kind === 'race') return true;
+  return m.cards.some(c => c.hole === hole.hole && c.status === 'pending');
+}
+
 export function render(root, s, ctx) {
   const m = s.mine;
   if (m.nextHole == null) { root.append(el('h2', null, 'All done'), el('p', null, 'Your team has finished the course.')); return challenges(root, s, ctx); }
@@ -13,7 +22,7 @@ export function render(root, s, ctx) {
   const waiting = m.cards.find(c => c.hole === hole.hole && c.status === 'pending');
   if (waiting) { root.append(el('p', 'card', 'Sent. Waiting for the other team or a ref to confirm.')); return challenges(root, s, ctx); }
   const back = m.cards.filter(c => c.hole === hole.hole && c.status === 'returned').pop();
-  if (back && back.note) root.append(el('p', 'flag', 'Sent back: ' + back.note));
+  if (back && back.note) root.append(el('p', 'flag', 'Sent back. ' + back.note));
 
   const pens = PENS.concat(hole.hazard && HAZ[hole.hazard] ? [HAZ[hole.hazard]] : []);
   const data = {};
@@ -30,22 +39,36 @@ export function render(root, s, ctx) {
     const pr = el('div', 'row');
     pens.forEach(([k, label]) => {
       const b = el('button', 'btn ghost', label);
-      b.onclick = () => { data[name].pen[k] = (data[name].pen[k] || 0) + 1; b.textContent = label + ' x' + data[name].pen[k]; };
-      b.oncontextmenu = e => { e.preventDefault(); data[name].pen[k] = 0; b.textContent = label; };
-      pr.append(b);
+      const minus = el('button', 'btn ghost', '-');
+      minus.setAttribute('aria-label', 'Take one off ' + label);
+      minus.style.display = 'none';
+      const show = () => {
+        const n = data[name].pen[k] || 0;
+        b.textContent = n ? label + ' x' + n : label;
+        minus.style.display = n ? '' : 'none';
+      };
+      b.onclick = () => { data[name].pen[k] = (data[name].pen[k] || 0) + 1; show(); };
+      minus.onclick = () => { data[name].pen[k] = Math.max(0, (data[name].pen[k] || 0) - 1); show(); };
+      pr.append(b, minus);
     });
     c.append(pr);
     root.append(c);
   });
-  root.append(el('p', 'sub', 'Tap a penalty once per time it happened. Long-press to clear it.'));
+  root.append(el('p', 'sub', 'Tap a penalty once per time it happened. Tap the minus beside it to take one off.'));
 
   let photo = null;
+  const send = el('button', 'btn', 'Send to be confirmed');
   const file = el('input'); file.type = 'file'; file.accept = 'image/*';
-  file.onchange = async () => { try { photo = file.files[0] ? await fileToJpeg(file.files[0], 1024) : null; } catch (e) { toast(e.message); } };
+  let converting = false;
+  file.onchange = async () => {
+    photo = null; converting = true; send.disabled = true;
+    try { photo = file.files[0] ? await fileToJpeg(file.files[0], 1024) : null; } catch (e) { toast(e.message); }
+    converting = false; send.disabled = false;
+  };
   root.append(el('label', null, 'Photo, optional'), file);
 
-  const send = el('button', 'btn', 'Send to be confirmed');
   send.onclick = async () => {
+    if (converting) return;
     send.disabled = true;
     const scores = {};
     m.roster.forEach(n => { scores[n] = data[n].missed ? { missed: true } : { sips: Number(data[n].sips), pen: data[n].pen }; });
