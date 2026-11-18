@@ -143,3 +143,52 @@ test('tab split ignores repeated names in forWho', () => {
   assert.equal(post(store, 'kteam1', 'tabAdd', { payer: 'Ava', venue: 'Pub', item: 'Round', cents: 3000, forWho: ['Ben', 'Ben'] }).ok, true);
   assert.deepEqual(get(store, 'kteam1').tab.settle.balances, { Ava: 3000, Ben: -3000, Cal: 0 });
 });
+
+test('admin proposes then saves teams', () => {
+  const store = fresh();
+  const out = post(store, 'kadmin', 'proposeTeams', { teamCount: 3, seed: 4 });
+  assert.equal(out.result.length, 3);
+  const flat = out.result.flat();
+  assert.equal(flat.length, 12);
+  assert.equal(out.result.findIndex(t => t.includes('Ava')), out.result.findIndex(t => t.includes('Ben')));
+  const teams = out.result.map((members, i) => ({ name: 'T' + (i + 1), captain: members[0], members }));
+  assert.equal(post(store, 'kadmin', 'saveTeams', { teams }).ok, true);
+  const s = get(store, '');
+  assert.equal(s.teams.length, 3);
+  assert.deepEqual(s.teams[0].members.slice().sort(), teams[0].members.slice().sort());
+  assert.match(post(store, 'kadmin', 'saveTeams', { teams: [{ name: 'X', captain: 'Zed', members: ['Ava'] }] }).error, /captain/);
+});
+
+test('proposeTeams refuses a team count that is not a whole number', () => {
+  assert.match(post(fresh(), 'kadmin', 'proposeTeams', { teamCount: 2.5, seed: 4 }).error, /whole number/);
+});
+
+test('admin makes and revokes codes', () => {
+  const store = fresh();
+  store.replace('Codes', [{ code: 'kadmin', role: 'admin', team: '', person: 'Jack', active: true }]);
+  assert.equal(post(store, 'kadmin', 'makeCodes', {}).ok, true);
+  const codes = get(store, 'kadmin').admin.codes.filter(c => c.active);
+  assert.equal(codes.filter(c => c.role === 'captain').length, 4);
+  assert.equal(codes.filter(c => c.role === 'team').length, 4);
+  assert.equal(codes.filter(c => c.role === 'ref').length, 1);
+  post(store, 'kadmin', 'makeCodes', {});
+  assert.equal(get(store, 'kadmin').admin.codes.filter(c => c.active).length, codes.length);
+  const cap = codes.find(c => c.role === 'captain');
+  assert.equal(post(store, 'kadmin', 'revokeCode', { code: cap.code }).ok, true);
+  assert.equal(get(store, cap.code).who.role, 'public');
+  assert.match(post(store, 'kadmin', 'revokeCode', { code: 'kadmin' }).error, /admin/);
+});
+
+test('admin sets a player photo and it shows as a face', () => {
+  const store = fresh();
+  assert.equal(post(store, 'kadmin', 'setPersonPhoto', { name: 'Ava', photo: 'AAAA' }).ok, true);
+  assert.match(get(store, '').faces.Ava, /^data:image\/jpeg/);
+  assert.match(post(store, 'kadmin', 'setPersonPhoto', { name: 'Nobody', photo: 'AAAA' }).error, /not on the list/);
+});
+
+test('admin sets the tie-break order', () => {
+  const store = fresh();
+  assert.equal(post(store, 'kadmin', 'tiebreak', { order: [3, 1] }).ok, true);
+  assert.deepEqual(get(store, 'kadmin').admin.settings.tiebreakOrder, [3, 1]);
+  assert.match(post(store, 'kcap1', 'tiebreak', { order: [1] }).error, /Only Jack/);
+});

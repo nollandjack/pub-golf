@@ -239,3 +239,76 @@ ACTIONS.tabDelete = function (req, d, who, store) {
   if (who.role !== 'team' && who.role !== 'captain') return { error: 'Use your team link' };
   if (!store.update('Tab', r => String(r.id) === String(req.id) && Number(r.team) === who.team, { deleted: true })) return { error: 'That entry was not found' };
 };
+
+// Admin actions: teams, codes, player photos and tie-break. Jack only unless noted.
+function adminOnly_(who) { return who.role === 'admin' ? null : { error: 'Only Jack can do that' }; }
+
+function setSetting_(store, key, value) {
+  const v = JSON.stringify(value);
+  if (!store.update('Settings', r => r.key === key, { value: v })) store.append('Settings', { key, value: v });
+}
+
+ACTIONS.proposeTeams = function (req, d, who, store, now) {
+  const no = adminOnly_(who); if (no) return no;
+  if (!Number.isInteger(Number(req.teamCount))) return { error: 'Team count must be a whole number' };
+  const players = d.people.filter(p => p.role === 'player').map(p => p.name);
+  const out = buildTeams(players, d.constraints, Number(req.teamCount), mulberry32(Number(req.seed) || now));
+  return out.error ? { error: out.error } : { result: out.teams };
+};
+
+ACTIONS.saveTeams = function (req, d, who, store) {
+  const no = adminOnly_(who); if (no) return no;
+  const players = d.people.filter(p => p.role === 'player').map(p => p.name);
+  const seen = {};
+  const teams = req.teams || [];
+  for (const t of teams) {
+    if (!clean_(t.name, 30)) return { error: 'Every team needs a name' };
+    if ((t.members || []).indexOf(t.captain) < 0) return { error: 'The captain of ' + t.name + ' must be on that team' };
+    for (const m of t.members) {
+      if (players.indexOf(m) < 0) return { error: m + ' is not a player on the list' };
+      if (seen[m]) return { error: m + ' is on two teams' };
+      seen[m] = true;
+    }
+  }
+  store.replace('Teams', teams.map((t, i) => ({ id: i + 1, name: clean_(t.name, 30), captain: t.captain })));
+  players.forEach(name => {
+    const i = teams.findIndex(t => t.members.indexOf(name) >= 0);
+    store.update('People', r => r.name === name, { team: i < 0 ? '' : i + 1 });
+  });
+};
+
+ACTIONS.makeCodes = function (req, d, who, store) {
+  const no = adminOnly_(who); if (no) return no;
+  const has = (role, team, person) => d.codes.some(c => c.active && c.role === role && c.team === team && (person == null || c.person === person));
+  const add = (role, team, person) => store.append('Codes', { code: 'k' + store.newId(), role, team: team == null ? '' : team, person, active: true });
+  d.teams.forEach(t => {
+    if (!has('team', t.id)) add('team', t.id, t.name);
+    if (!has('captain', t.id, t.captain)) {
+      store.update('Codes', r => r.role === 'captain' && Number(r.team) === t.id, { active: false });
+      add('captain', t.id, t.captain);
+    }
+  });
+  d.people.filter(p => p.role === 'ref').forEach(p => { if (!has('ref', null, p.name)) add('ref', null, p.name); });
+};
+
+ACTIONS.revokeCode = function (req, d, who, store) {
+  const no = adminOnly_(who); if (no) return no;
+  const c = d.codes.find(x => x.code === String(req.code));
+  if (!c) return { error: 'Code not found' };
+  if (c.role === 'admin') return { error: 'The admin code is changed in the Sheet, not here' };
+  store.update('Codes', r => r.code === c.code, { active: false });
+};
+
+ACTIONS.setPersonPhoto = function (req, d, who, store) {
+  const no = adminOnly_(who); if (no) return no;
+  if (!d.people.some(p => p.name === req.name)) return { error: req.name + ' is not on the list' };
+  if (!req.photo || String(req.photo).length > 1500000) return { error: 'Pick a photo under about 1MB' };
+  const id = store.savePhoto(String(req.photo), 'person-' + req.name);
+  store.update('People', r => r.name === req.name, { photoId: id });
+};
+
+ACTIONS.tiebreak = function (req, d, who, store) {
+  if (who.role !== 'admin') return { error: 'Only Jack can set the tie-break' };
+  const order = (req.order || []).map(Number).filter(id => d.teams.some(t => t.id === id));
+  setSetting_(store, 'tiebreakOrder', order);
+};
