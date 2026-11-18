@@ -22,12 +22,12 @@ function teamBuilder(s, ctx) {
   };
   function show() {
     out.innerHTML = '';
-    proposal.forEach(t => {
+    proposal.forEach((t, i) => {
       const box = el('div', 'card');
       box.append(el('strong', null, t.name));
       t.members.forEach(m => {
         const r = el('label', 'row');
-        const rb = el('input'); rb.type = 'radio'; rb.name = 'cap-' + t.name; rb.checked = m === t.captain; rb.style.width = 'auto';
+        const rb = el('input'); rb.type = 'radio'; rb.name = 'cap-' + i; rb.checked = m === t.captain; rb.style.width = 'auto';
         rb.onchange = () => { t.captain = m; };
         r.append(rb, face(s, m, 28), el('span', null, m + ' (captain?)'));
         box.append(r);

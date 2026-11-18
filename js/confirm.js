@@ -13,7 +13,7 @@ export function render(root, s, ctx) {
       const e = q.scores[name];
       const r = el('div', 'row');
       const pens = e.pen ? Object.keys(e.pen).map(k => PEN_NAMES[k] + ' x' + e.pen[k]).join(', ') : '';
-      r.append(face(s, name, 32), el('span', null, name + ', ' + (e.missed ? 'missed' : e.sips + ' sips' + (pens ? ', ' + pens : ''))));
+      r.append(face(s, name, 32), el('span', null, name + ', ' + (e.missed ? 'missed' : e.sips + (Number(e.sips) === 1 ? ' sip' : ' sips') + (pens ? ', ' + pens : ''))));
       c.append(r);
     });
     if (q.photo) { const i = el('img'); i.src = q.photo; i.style.maxWidth = '100%'; i.style.borderRadius = '8px'; c.append(i); }
