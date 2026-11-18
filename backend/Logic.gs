@@ -153,3 +153,31 @@ function buildTeams(players, constraints, teamCount, rng) {
   }
   return { error: 'Could not find teams that keep everyone apart who needs to be. Try a different team count.' };
 }
+
+// Entries split evenly across forWho (or the whole team when empty). Odd cents go to the first people listed.
+function settleTab(entries, members) {
+  const bal = {};
+  members.forEach(m => { bal[m] = 0; });
+  entries.forEach(e => {
+    const who = ((e.forWho && e.forWho.length) ? e.forWho : members).filter(m => m in bal);
+    if (!who.length || !(e.payer in bal)) return;
+    const cents = Math.round(Number(e.cents) || 0);
+    bal[e.payer] += cents;
+    const share = Math.floor(cents / who.length);
+    let rem = cents - share * who.length;
+    who.forEach(m => { bal[m] -= share + (rem > 0 ? 1 : 0); if (rem > 0) rem--; });
+  });
+  const side = sign => members.filter(m => sign * bal[m] > 0).map(m => ({ m, v: Math.abs(bal[m]) })).sort((a, b) => b.v - a.v);
+  const debtors = side(-1);
+  const creditors = side(1);
+  const transfers = [];
+  let i = 0, k = 0;
+  while (i < debtors.length && k < creditors.length) {
+    const amt = Math.min(debtors[i].v, creditors[k].v);
+    transfers.push({ from: debtors[i].m, to: creditors[k].m, cents: amt });
+    debtors[i].v -= amt; creditors[k].v -= amt;
+    if (!debtors[i].v) i++;
+    if (!creditors[k].v) k++;
+  }
+  return { balances: bal, transfers };
+}

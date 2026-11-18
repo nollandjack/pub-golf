@@ -122,3 +122,20 @@ test('team builder explains impossible rules', () => {
 test('same seed gives the same teams', () => {
   assert.deepEqual(j(L.buildTeams(names, [], 3, L.mulberry32(7))), j(L.buildTeams(names, [], 3, L.mulberry32(7))));
 });
+
+test('tab splits evenly by default and settles in few transfers', () => {
+  const out = L.settleTab([{ payer: 'Ava', cents: 3000, forWho: [] }, { payer: 'Ben', cents: 1500, forWho: [] }], ['Ava', 'Ben', 'Cal']);
+  assert.deepEqual(j(out.balances), { Ava: 1500, Ben: 0, Cal: -1500 });
+  assert.deepEqual(j(out.transfers), [{ from: 'Cal', to: 'Ava', cents: 1500 }]);
+});
+
+test('tab respects who a cost was for and keeps every cent', () => {
+  const out = L.settleTab([{ payer: 'Ava', cents: 1000, forWho: ['Ava', 'Ben', 'Cal'] }, { payer: 'Cal', cents: 2000, forWho: ['Ben', 'Cal'] }], ['Ava', 'Ben', 'Cal']);
+  // 1000 / 3 = 334, 333, 333. Ben owes 333 + 1000, Cal is +2000 - 333 - 1000
+  assert.deepEqual(j(out.balances), { Ava: 666, Ben: -1333, Cal: 667 });
+  assert.equal(Object.values(out.balances).reduce((a, b) => a + b, 0), 0);
+});
+
+test('tab ignores entries for people not on the team', () => {
+  assert.deepEqual(j(L.settleTab([{ payer: 'Zed', cents: 500, forWho: [] }], ['Ava']).balances), { Ava: 0 });
+});
