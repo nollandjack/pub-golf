@@ -11,21 +11,43 @@ function playerScore(entry) {
   return total;
 }
 
-// Every roster player counts. A missed or blank entry scores par plus the missed-hole penalty.
-function holeTeamScore(scores, roster, par, missedPenalty) {
+// Every roster player counts. A missed or blank entry scores missedScore.
+function holeTeamScore(scores, roster, missedScore) {
   if (!roster.length) return 0;
   let sum = 0;
   roster.forEach(name => {
     const e = scores[name];
-    sum += (!e || e.missed) ? par + missedPenalty : playerScore(e);
+    sum += (!e || e.missed) ? missedScore : playerScore(e);
   });
   return round2(sum / roster.length);
 }
 
+// Highest real player score on a hole across every confirmed card, any team. Null when nobody has one yet.
+function worstOnHole(cards, hole) {
+  let worst = null;
+  cards.forEach(c => {
+    if (c.hole !== hole || c.status !== 'confirmed') return;
+    Object.keys(c.scores || {}).forEach(n => {
+      const e = c.scores[n];
+      if (!e || e.missed) return;
+      const v = playerScore(e);
+      if (worst == null || v > worst) worst = v;
+    });
+  });
+  return worst;
+}
+
+// Teams that did not finish are left out. Ties share a place.
 function raceRanks(rows) {
   const out = {};
-  rows.forEach(r => { out[r.team] = 1 + rows.filter(x => x.ms < r.ms).length; });
+  const ranked = rows.filter(r => !r.dnf);
+  ranked.forEach(r => { out[r.team] = 1 + ranked.filter(x => x.ms < r.ms).length; });
   return out;
+}
+
+function raceScore(row, rank, settings) {
+  if (row.dnf) return settings.raceDnf;
+  return settings.raceFirst + settings.raceStep * (rank - 1);
 }
 
 function pokiesWinners(rows) {
@@ -40,40 +62,43 @@ function rosterOf(people, teamId) {
 }
 
 function leaderboard(d) {
-  const missed = Number(d.settings.missedPenalty) || 0;
-  const bonus = Number(d.settings.pokiesBonus) || 0;
-  const order = d.settings.tiebreakOrder || [];
+  const st = d.settings;
+  const num = (v, def) => (v === undefined || v === null || v === '' || isNaN(Number(v)) ? def : Number(v));
+  const rs = { raceFirst: num(st.raceFirst, -2), raceStep: num(st.raceStep, 2), raceDnf: num(st.raceDnf, 15) };
+  const missedExtra = num(st.missedExtra, 5);
+  const bonus = num(st.pokiesBonus, 3);
+  const order = st.tiebreakOrder || [];
   const ranks = raceRanks(d.race);
   const winners = pokiesWinners(d.pokies);
   const holes = d.holes.slice().sort((a, b) => a.hole - b.hole);
+  const confirmed = d.cards.filter(c => c.status === 'confirmed');
 
   const rows = d.teams.map(t => {
     const roster = rosterOf(d.people, t.id);
-    const row = { team: t.id, name: t.name, total: 0, toPar: 0, played: 0, nextHole: null, pending: false, byHole: {} };
-    let par = 0;
+    const row = { team: t.id, name: t.name, total: 0, played: 0, nextHole: null, pending: false, byHole: {} };
     holes.forEach(h => {
       let score = null;
       if (h.kind === 'race') {
-        if (ranks[t.id] != null) score = ranks[t.id] - (winners.indexOf(t.id) >= 0 ? bonus : 0);
+        const r = d.race.find(x => x.team === t.id);
+        if (r && (r.dnf || ranks[t.id] != null)) score = raceScore(r, ranks[t.id], rs) - (winners.indexOf(t.id) >= 0 ? bonus : 0);
       } else {
-        const c = d.cards.find(x => x.team === t.id && x.hole === h.hole && x.status === 'confirmed');
-        if (c) score = holeTeamScore(c.scores, roster, h.par, missed);
+        const c = confirmed.find(x => x.team === t.id && x.hole === h.hole);
+        if (c) score = holeTeamScore(c.scores, roster, (worstOnHole(confirmed, h.hole) || 0) + missedExtra);
         else if (d.cards.some(x => x.team === t.id && x.hole === h.hole && x.status === 'pending')) row.pending = true;
       }
       if (score == null) { if (row.nextHole == null) row.nextHole = h.hole; return; }
-      row.byHole[h.hole] = score; row.total += score; par += h.par; row.played++;
+      row.byHole[h.hole] = score; row.total += score; row.played++;
     });
     row.total = round2(row.total);
-    row.toPar = round2(row.total - par);
     row.done = row.nextHole == null;
     return row;
   });
 
   const tb = id => { const i = order.indexOf(id); return i < 0 ? 999 : i; };
-  rows.sort((a, b) => a.toPar - b.toPar || b.played - a.played || tb(a.team) - tb(b.team) || a.team - b.team);
+  rows.sort((a, b) => a.total - b.total || b.played - a.played || tb(a.team) - tb(b.team) || a.team - b.team);
   rows.forEach((r, i) => {
     const p = rows[i - 1];
-    r.rank = p && p.toPar === r.toPar && p.played === r.played && tb(p.team) === tb(r.team) ? p.rank : i + 1;
+    r.rank = p && p.total === r.total && p.played === r.played && tb(p.team) === tb(r.team) ? p.rank : i + 1;
   });
   rows.forEach(r => { r.tied = rows.filter(x => x.rank === r.rank).length > 1; });
   return rows;
@@ -91,10 +116,11 @@ function confirmersFor(teamId, teamIds) {
   return [ids[i % 2 === 0 ? i + 1 : i - 1]];
 }
 
-function cardFlags(scores, par) {
+function cardFlags(scores, drink) {
   const flags = [];
   const played = Object.keys(scores).filter(n => !scores[n].missed);
-  played.forEach(n => { if (Number(scores[n].sips) === 1 && par >= 3) flags.push(n + ' finished in one sip'); });
+  const shot = /shot/i.test(String(drink || ''));
+  played.forEach(n => { if (Number(scores[n].sips) === 1 && !shot) flags.push(n + ' finished in one sip'); });
   const sips = played.map(n => Number(scores[n].sips));
   if (sips.length >= 3 && sips.every(s => s === sips[0])) flags.push('Everyone has the same sips');
   return flags;

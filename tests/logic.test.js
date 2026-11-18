@@ -10,13 +10,24 @@ test('player score is sips plus weighted penalties', () => {
   assert.equal(L.playerScore({ sips: 3, pen: { slip: 2, word: 3 } }), 8);
 });
 
-test('hole score averages the roster and charges missed players', () => {
+test('hole score averages the roster and charges missed players the missed score', () => {
   const scores = { Ava: { sips: 3 }, Ben: { sips: 5, pen: { spill: 1 } }, Cal: { missed: true } };
-  // Ava 3, Ben 6, Cal par 3 + missed 3 = 6, average 5
-  assert.equal(L.holeTeamScore(scores, ['Ava', 'Ben', 'Cal'], 3, 3), 5);
+  // Ava 3, Ben 6, Cal 9, average 6
+  assert.equal(L.holeTeamScore(scores, ['Ava', 'Ben', 'Cal'], 9), 6);
   // a roster player with no entry counts as missed
-  assert.equal(L.holeTeamScore({ Ava: { sips: 2 } }, ['Ava', 'Ben'], 2, 3), 3.5);
-  assert.equal(L.holeTeamScore({}, [], 3, 3), 0);
+  assert.equal(L.holeTeamScore({ Ava: { sips: 2 } }, ['Ava', 'Ben'], 7), 4.5);
+  assert.equal(L.holeTeamScore({}, [], 9), 0);
+});
+
+test('worst on the hole is the highest real score on any confirmed card', () => {
+  const cards = [
+    { team: 1, hole: 1, status: 'confirmed', scores: { Ava: { sips: 3 }, Ben: { sips: 5, pen: { spill: 1 } }, Cal: { missed: true } } },
+    { team: 2, hole: 1, status: 'confirmed', scores: { Cal: { sips: 8 }, Dee: { sips: 2 } } },
+    { team: 2, hole: 3, status: 'confirmed', scores: { Cal: { sips: 20 } } }
+  ];
+  assert.equal(L.worstOnHole(cards, 1), 8);
+  assert.equal(L.worstOnHole(cards, 2), null);
+  assert.equal(L.worstOnHole([{ team: 1, hole: 1, status: 'confirmed', scores: { Ava: { missed: true } } }], 1), null);
 });
 
 const holes = [
@@ -31,10 +42,24 @@ const people = [
 ];
 const teams = [{ id: 1, name: 'Ones' }, { id: 2, name: 'Twos' }];
 const card = (team, hole, scores, status) => ({ id: team + '-' + hole, team, hole, scores, status: status || 'confirmed' });
-const base = extra => Object.assign({ teams, people, holes, cards: [], race: [], pokies: [], settings: { missedPenalty: 3, pokiesBonus: 3, tiebreakOrder: [] } }, extra);
+const SETTINGS = { missedExtra: 5, raceFirst: -2, raceStep: 2, raceDnf: 15, pokiesBonus: 3, tiebreakOrder: [] };
+const base = extra => Object.assign({ teams, people, holes, cards: [], race: [], pokies: [], settings: SETTINGS }, extra);
 
 test('race ranks share places on a tie', () => {
   assert.deepEqual(j(L.raceRanks([{ team: 1, ms: 9000 }, { team: 2, ms: 7000 }, { team: 3, ms: 9000 }])), { 1: 2, 2: 1, 3: 2 });
+});
+
+test('race ranks skip DNF rows', () => {
+  const r = j(L.raceRanks([{ team: 1, ms: 9000 }, { team: 2, ms: '', dnf: true }, { team: 3, ms: 7000 }]));
+  assert.deepEqual(r, { 1: 2, 3: 1 });
+});
+
+test('race score is the ladder, or the DNF score', () => {
+  const s = { raceFirst: -2, raceStep: 2, raceDnf: 15 };
+  assert.equal(L.raceScore({ team: 1, ms: 1 }, 1, s), -2);
+  assert.equal(L.raceScore({ team: 1, ms: 1 }, 2, s), 0);
+  assert.equal(L.raceScore({ team: 1, ms: 1 }, 4, s), 4);
+  assert.equal(L.raceScore({ team: 1, ms: '', dnf: true }, undefined, s), 15);
 });
 
 test('pokies winners are every team on the top amount', () => {
@@ -48,15 +73,77 @@ test('leaderboard counts only confirmed cards and finds the next hole', () => {
   }));
   const one = board.find(r => r.team === 1);
   const two = board.find(r => r.team === 2);
-  assert.equal(one.total, 3); assert.equal(one.toPar, 0); assert.equal(one.played, 1); assert.equal(one.nextHole, 2);
+  assert.equal(one.total, 3); assert.equal('toPar' in one, false); assert.equal(one.played, 1); assert.equal(one.nextHole, 2);
   assert.equal(two.played, 0); assert.equal(two.pending, true); assert.equal(two.nextHole, 1);
-  assert.equal(board[0].team, 1);
+  // raw totals: a team that has played nothing sits on 0, so it ranks above a team on 3 until scores come in
+  assert.equal(board[0].team, 2);
 });
 
-test('race hole scores the rank minus the pokies bonus', () => {
-  const board = L.leaderboard(base({ race: [{ team: 1, ms: 5000 }, { team: 2, ms: 4000 }], pokies: [{ team: 1, cents: 2000 }, { team: 2, cents: 100 }] }));
-  assert.equal(board.find(r => r.team === 1).byHole[2], -1);
-  assert.equal(board.find(r => r.team === 2).byHole[2], 1);
+test('race ladder scores -2, 0, 2, 4 and the pokies winner takes 3 off', () => {
+  const t4 = [1, 2, 3, 4].map(id => ({ id, name: 'T' + id }));
+  const p4 = [1, 2, 3, 4].map(id => ({ name: 'P' + id, team: id, role: 'player' }));
+  const race = [{ team: 1, ms: 4000 }, { team: 2, ms: 1000 }, { team: 3, ms: 2000 }, { team: 4, ms: 3000 }];
+  let board = L.leaderboard(base({ teams: t4, people: p4, race }));
+  assert.deepEqual([2, 3, 4, 1].map(t => board.find(r => r.team === t).byHole[2]), [-2, 0, 2, 4]);
+  board = L.leaderboard(base({ teams: t4, people: p4, race, pokies: [{ team: 2, cents: 2000 }, { team: 4, cents: 100 }] }));
+  assert.equal(board.find(r => r.team === 2).byHole[2], -5);
+  assert.equal(board.find(r => r.team === 4).byHole[2], 2);
+});
+
+test('a tie for first gives both -2 and the next place +2', () => {
+  const t3 = [1, 2, 3].map(id => ({ id, name: 'T' + id }));
+  const p3 = [1, 2, 3].map(id => ({ name: 'P' + id, team: id, role: 'player' }));
+  const board = L.leaderboard(base({ teams: t3, people: p3, race: [{ team: 1, ms: 5 }, { team: 2, ms: 5 }, { team: 3, ms: 9 }] }));
+  assert.deepEqual([1, 2, 3].map(t => board.find(r => r.team === t).byHole[2]), [-2, -2, 2]);
+});
+
+test('a DNF team scores 15 and does not push others down', () => {
+  const board = L.leaderboard(base({ race: [{ team: 1, ms: 5000 }, { team: 2, ms: '', dnf: true }] }));
+  assert.equal(board.find(r => r.team === 1).byHole[2], -2);
+  assert.equal(board.find(r => r.team === 2).byHole[2], 15);
+});
+
+test('missed player scores the worst on the hole plus 5 (worst 8 is on another team)', () => {
+  const t3 = [{ id: 1, name: 'A' }, { id: 2, name: 'B' }];
+  const p = [{ name: 'Ava', team: 1, role: 'player' }, { name: 'Ben', team: 1, role: 'player' }, { name: 'Cal', team: 1, role: 'player' }, { name: 'Dee', team: 2, role: 'player' }];
+  const cards = [
+    card(1, 1, { Ava: { sips: 3 }, Ben: { sips: 5, pen: { spill: 1 } }, Cal: { missed: true } }),
+    card(2, 1, { Dee: { sips: 8 } })
+  ];
+  const t = L.leaderboard(base({ teams: t3, people: p, cards })).find(r => r.team === 1);
+  assert.equal(t.byHole[1], L.round2((3 + 6 + 13) / 3));
+});
+
+test('with no other real scores a missed player scores the worst on their own card plus 5', () => {
+  const p = [{ name: 'Ava', team: 1, role: 'player' }, { name: 'Ben', team: 1, role: 'player' }, { name: 'Cal', team: 1, role: 'player' }];
+  const cards = [card(1, 1, { Ava: { sips: 3 }, Ben: { sips: 6 }, Cal: { missed: true } })];
+  const t = L.leaderboard(base({ teams: [teams[0]], people: p, cards })).find(r => r.team === 1);
+  assert.equal(t.byHole[1], L.round2((3 + 6 + 11) / 3));
+  // nobody has a real score at all, so the missed player scores just missedExtra
+  const only = [card(1, 1, { Ava: { missed: true }, Ben: { missed: true }, Cal: { missed: true } })];
+  assert.equal(L.leaderboard(base({ teams: [teams[0]], people: p, cards: only }))[0].byHole[1], 5);
+});
+
+test('the board ranks by raw total and rows carry no toPar', () => {
+  const cards = [
+    card(1, 1, { Ava: { sips: 3 }, Ben: { sips: 3 } }),
+    card(2, 1, { Cal: { sips: 1 }, Dee: { sips: 1 } }), card(2, 3, { Cal: { sips: 2 }, Dee: { sips: 4 } })
+  ];
+  const b = L.leaderboard(base({ cards }));
+  assert.equal(b.every(r => !('toPar' in r)), true);
+  // team 1 total 3, team 2 total 4
+  assert.deepEqual(b.map(r => [r.team, r.total]), [[1, 3], [2, 4]]);
+});
+
+test('same total ranks the team that has played more holes first', () => {
+  const cards = [
+    card(1, 1, { Ava: { sips: 3 }, Ben: { sips: 3 } }),
+    card(2, 1, { Cal: { sips: 1 }, Dee: { sips: 1 } }), card(2, 3, { Cal: { sips: 2 }, Dee: { sips: 2 } })
+  ];
+  const b = L.leaderboard(base({ cards }));
+  // both total 3, team 2 has played two holes
+  assert.deepEqual(b.map(r => [r.team, r.total, r.played]), [[2, 3, 2], [1, 3, 1]]);
+  assert.equal(b[0].tied, false);
 });
 
 test('finished level teams are tied until a tie-break order is set', () => {
@@ -67,7 +154,7 @@ test('finished level teams are tied until a tie-break order is set', () => {
   const race = [{ team: 1, ms: 1 }, { team: 2, ms: 1 }];
   let board = L.leaderboard(base({ cards: all, race }));
   assert.equal(board[0].tied, true); assert.equal(board[0].done, true); assert.equal(board[1].rank, 1);
-  board = L.leaderboard(base({ cards: all, race, settings: { missedPenalty: 3, pokiesBonus: 3, tiebreakOrder: [2, 1] } }));
+  board = L.leaderboard(base({ cards: all, race, settings: Object.assign({}, SETTINGS, { tiebreakOrder: [2, 1] }) }));
   assert.equal(board[0].team, 2); assert.equal(board[0].tied, false); assert.equal(board[1].rank, 2);
 });
 
@@ -91,10 +178,11 @@ test('an odd number of teams puts the last three in a ring', () => {
   assert.deepEqual(j(L.confirmersFor(1, [1])), []);
 });
 
-test('cards with one-sip pints or identical sips get flagged', () => {
-  assert.deepEqual(j(L.cardFlags({ Ava: { sips: 1 }, Ben: { sips: 4 } }, 3)), ['Ava finished in one sip']);
-  assert.deepEqual(j(L.cardFlags({ Ava: { sips: 1 } }, 1)), []);
-  assert.deepEqual(j(L.cardFlags({ A: { sips: 3 }, B: { sips: 3 }, C: { sips: 3 }, D: { missed: true } }, 3)), ['Everyone has the same sips']);
+test('cards with one-sip drinks or identical sips get flagged', () => {
+  assert.deepEqual(j(L.cardFlags({ Ava: { sips: 1 }, Ben: { sips: 4 } }, 'Large red wine')), ['Ava finished in one sip']);
+  assert.deepEqual(j(L.cardFlags({ Ava: { sips: 1 } }, 'Fireball shot')), []);
+  assert.deepEqual(j(L.cardFlags({ Ava: { sips: 1 } }, 'Fireball SHOT')), []);
+  assert.deepEqual(j(L.cardFlags({ A: { sips: 3 }, B: { sips: 3 }, C: { sips: 3 }, D: { missed: true } }, 'Premix')), ['Everyone has the same sips']);
 });
 
 const names = ['Ava', 'Ben', 'Cal', 'Dee', 'Eli', 'Fay', 'Gus', 'Hal', 'Ivy', 'Jo', 'Kit'];

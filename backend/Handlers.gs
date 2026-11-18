@@ -16,7 +16,7 @@ function num_(v) { return v === '' || v == null ? null : Number(v); }
 function bool_(v) { return v === true || v === 'TRUE' || v === 'true'; }
 
 function load_(store) {
-  const settings = { missedPenalty: 3, pokiesBonus: 3, tiebreakOrder: [] };
+  const settings = { missedExtra: 5, raceFirst: -2, raceStep: 2, raceDnf: 15, pokiesBonus: 3, tiebreakOrder: [] };
   store.all('Settings').forEach(r => { settings[r.key] = parseJson_(r.value, r.value); });
   return {
     settings,
@@ -26,7 +26,7 @@ function load_(store) {
     codes: store.all('Codes').map(c => ({ code: String(c.code), role: String(c.role), team: num_(c.team), person: String(c.person || ''), active: bool_(c.active) })),
     constraints: store.all('Constraints').map(c => ({ kind: String(c.kind), a: String(c.a), b: String(c.b) })),
     cards: store.all('Cards').map(c => ({ id: String(c.id), team: num_(c.team), hole: num_(c.hole), scores: parseJson_(c.scores, {}), photoId: String(c.photoId || ''), status: String(c.status), submittedBy: String(c.submittedBy || ''), confirmedBy: String(c.confirmedBy || ''), note: String(c.note || ''), ts: num_(c.ts) })),
-    race: store.all('Race').map(r => ({ team: num_(r.team), ms: num_(r.ms) })),
+    race: store.all('Race').map(r => ({ team: num_(r.team), ms: num_(r.ms), dnf: bool_(r.dnf) })),
     pokies: store.all('Pokies').map(r => ({ team: num_(r.team), cents: num_(r.cents) })),
     tab: store.all('Tab').map(r => ({ id: String(r.id), team: num_(r.team), payer: String(r.payer), venue: String(r.venue || ''), item: String(r.item || ''), cents: num_(r.cents), forWho: parseJson_(r.forWho, []), ts: num_(r.ts), deleted: bool_(r.deleted) })),
     challenges: store.all('Challenges').map(r => ({ id: String(r.id), byTeam: num_(r.byTeam), team: num_(r.team), hole: num_(r.hole), reason: String(r.reason || ''), status: String(r.status), ts: num_(r.ts) }))
@@ -54,7 +54,7 @@ function state_(d, who, store) {
   d.people.forEach(p => { if (p.photoId) faces[p.name] = store.photoUrl(p.photoId); });
   const s = {
     who: { role: who.role, team: who.team, person: who.person },
-    settings: { missedPenalty: d.settings.missedPenalty, pokiesBonus: d.settings.pokiesBonus },
+    settings: { missedExtra: d.settings.missedExtra, raceFirst: d.settings.raceFirst, raceStep: d.settings.raceStep, raceDnf: d.settings.raceDnf, pokiesBonus: d.settings.pokiesBonus },
     holes: d.holes.map(h => Object.assign({}, h, { hazard: staff || h.hole <= reached ? h.hazard : (h.hazard ? 'hidden' : '') })),
     teams: d.teams.map(t => ({ id: t.id, name: t.name, captain: t.captain, members: rosterOf(d.people, t.id) })),
     faces,
@@ -71,8 +71,8 @@ function state_(d, who, store) {
   }
   if (who.role === 'captain' || staff) {
     s.queue = d.cards.filter(c => c.status === 'pending' && canConfirm_(d, who, c)).map(c => {
-      const h = d.holes.find(x => x.hole === c.hole) || { par: 0 };
-      return { id: c.id, team: c.team, teamName: teamName(c.team), hole: c.hole, par: h.par, scores: c.scores, flags: cardFlags(c.scores, h.par), photo: store.photoUrl(c.photoId), submittedBy: c.submittedBy, ts: c.ts };
+      const h = d.holes.find(x => x.hole === c.hole) || { drink: '' };
+      return { id: c.id, team: c.team, teamName: teamName(c.team), hole: c.hole, drink: h.drink, scores: c.scores, flags: cardFlags(c.scores, h.drink), photo: store.photoUrl(c.photoId), submittedBy: c.submittedBy, ts: c.ts };
     });
   }
   if (who.role === 'team' || who.role === 'captain') {
@@ -212,9 +212,14 @@ function teamResults_(req, d, field) {
 
 ACTIONS.raceResult = function (req, d, who, store) {
   if (who.role !== 'ref' && who.role !== 'admin') return { error: 'Only refs can enter this' };
-  const r = teamResults_(req, d, 'ms');
+  // A DNF row needs no time and is stored with a blank ms. Other rows need a whole, non-negative ms.
+  const results = req.results || [];
+  const dnf = {};
+  results.forEach(x => { if (x && x.dnf === true) dnf[Number(x.team)] = true; });
+  if (results.some(x => !(x && x.dnf === true) && (!x || x.ms === '' || x.ms == null))) return { error: 'Numbers must be whole and not negative' };
+  const r = teamResults_({ results: results.map(x => (x && x.dnf === true ? { team: x.team, ms: 0 } : x)) }, d, 'ms');
   if (r.error) return r;
-  store.replace('Race', r.rows);
+  store.replace('Race', r.rows.map(row => (dnf[row.team] ? { team: row.team, ms: '', dnf: true } : { team: row.team, ms: row.ms, dnf: false })));
 };
 
 ACTIONS.pokiesResult = function (req, d, who, store) {

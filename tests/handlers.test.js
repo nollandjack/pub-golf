@@ -14,12 +14,12 @@ test('public sees the board but no private parts', () => {
   assert.equal(s.who.role, 'public');
   assert.equal(s.board.length, 4);
   assert.equal(s.tab, undefined); assert.equal(s.queue, undefined); assert.equal(s.admin, undefined);
-  assert.equal(s.holes.find(h => h.hole === 4).hazard, 'hidden');
+  assert.equal(s.holes.find(h => h.hole === 2).hazard, 'hidden');
   assert.deepEqual(s.teams[0].members, ['Ava', 'Ben', 'Cal']);
 });
 
 test('staff see hazards and admin sees codes', () => {
-  assert.equal(get(fresh(), 'kref').holes.find(h => h.hole === 4).hazard, 'wrong-hand');
+  assert.equal(get(fresh(), 'kref').holes.find(h => h.hole === 2).hazard, 'wrong-hand');
   const a = get(fresh(), 'kadmin');
   assert.equal(a.who.role, 'admin');
   assert.ok(a.admin.codes.some(c => c.code === 'kcap1'));
@@ -119,9 +119,40 @@ test('ref enters race times and pokies, board applies both', () => {
   assert.equal(post(store, 'kref', 'raceResult', { results }).ok, true);
   assert.equal(post(store, 'kref', 'pokiesResult', { results: [1, 2, 3, 4].map(team => ({ team, cents: team === 3 ? 6000 : 1000 })) }).ok, true);
   const b = get(store, '').board;
-  assert.equal(b.find(r => r.team === 1).byHole[3], 1);
-  assert.equal(b.find(r => r.team === 3).byHole[3], 0);
+  // ladder -2, 0, 2, 4 by time, then pokies winner (team 3) takes 3 off
+  assert.equal(b.find(r => r.team === 1).byHole[3], -2);
+  assert.equal(b.find(r => r.team === 3).byHole[3], 2 - 3);
   assert.match(post(store, 'kref', 'raceResult', { results: [{ team: 9, ms: 5 }] }).error, /Unknown team/);
+});
+
+test('race result accepts a DNF with no time and refuses a non-DNF row with no time', () => {
+  const store = fresh();
+  assert.equal(post(store, 'kref', 'raceResult', { results: [{ team: 1, ms: 5000 }, { team: 2, dnf: true }] }).ok, true);
+  assert.deepEqual(j(store.tables.Race), [{ team: 1, ms: 5000, dnf: false }, { team: 2, ms: '', dnf: true }]);
+  const b = get(store, '').board;
+  assert.equal(b.find(r => r.team === 1).byHole[3], -2);
+  assert.equal(b.find(r => r.team === 2).byHole[3], 15);
+  assert.match(post(store, 'kref', 'raceResult', { results: [{ team: 1 }] }).error, /whole and not negative/);
+  assert.match(post(store, 'kref', 'raceResult', { results: [{ team: 1, ms: '' }] }).error, /whole and not negative/);
+});
+
+test('state exposes the new settings and queue items carry the drink, not par', () => {
+  const store = fresh();
+  const s = get(store, '');
+  assert.deepEqual(s.settings, { missedExtra: 5, raceFirst: -2, raceStep: 2, raceDnf: 15, pokiesBonus: 3 });
+  assert.equal('toPar' in s.board[0], false);
+  post(store, 'kcap1', 'submitCard', { hole: 1, scores: { Ava: { sips: 1 }, Ben: { sips: 2 }, Cal: { sips: 4 } } });
+  const q = get(store, 'kcap2').queue[0];
+  assert.equal('par' in q, false);
+  assert.equal(q.drink, 'Premix');
+});
+
+test('a missed player costs the worst real score on the hole plus 5', () => {
+  const store = fresh();
+  post(store, 'kcap1', 'submitCard', { hole: 1, scores: { Ava: { sips: 3 }, Ben: { sips: 4 }, Cal: { missed: true } } });
+  post(store, 'kcap2', 'confirmCard', { cardId: get(store, 'kcap2').queue[0].id });
+  // worst real score is 4, Cal scores 9, average (3 + 4 + 9) / 3
+  assert.equal(get(store, '').board.find(r => r.team === 1).byHole[1], 5.33);
 });
 
 test('team tab adds, splits and deletes within the team', () => {
@@ -254,4 +285,9 @@ test('a Sheet that returns every value as text still works', () => {
   assert.equal(post(store, 'kcap2', 'confirmCard', { cardId: q[0].id }).ok, true);
   assert.equal(get(store, '').board.find(r => r.team === 1).byHole[1], 3);
   assert.equal(post(store, 'kref', 'pokiesResult', { results: [{ team: '1', cents: '500' }] }).ok, true);
+  // dnf comes back from a Sheet as the text TRUE or FALSE
+  store.replace('Race', [{ team: '1', ms: '5000', dnf: 'FALSE' }, { team: '2', ms: '', dnf: 'TRUE' }]);
+  const b = get(store, '').board;
+  assert.equal(b.find(r => r.team === 1).byHole[3], -2 - 3);
+  assert.equal(b.find(r => r.team === 2).byHole[3], 15);
 });

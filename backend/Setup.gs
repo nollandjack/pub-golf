@@ -8,7 +8,7 @@ var TABS = {
   Codes: ['code', 'role', 'team', 'person', 'active'],
   Constraints: ['kind', 'a', 'b'],
   Cards: ['id', 'team', 'hole', 'scores', 'photoId', 'status', 'submittedBy', 'confirmedBy', 'note', 'ts'],
-  Race: ['team', 'ms'],
+  Race: ['team', 'ms', 'dnf'],
   Pokies: ['team', 'cents'],
   Tab: ['id', 'team', 'payer', 'venue', 'item', 'cents', 'forWho', 'ts', 'deleted'],
   Challenges: ['id', 'byTeam', 'team', 'hole', 'reason', 'status', 'ts'],
@@ -16,13 +16,13 @@ var TABS = {
 };
 
 var COURSE = [
-  [1, "Jack's place", 'Sent in the group chat', '', '', 'Premix', '', '', 'normal'],
-  [2, 'Royal Hotel', 'Randwick', '', '', 'Espresso martini', '', '', 'normal'],
+  [1, "Jack's place", 'Sent in the group chat', '', '', 'Premix', '', 'silent', 'normal'],
+  [2, 'Royal Hotel', 'Randwick', '', '', 'Espresso martini', '', 'wrong-hand', 'normal'],
   [3, 'Coach and Horses', '147 Avoca St, Randwick', '', '', 'Guinness boat race and pokies', '', '', 'race'],
-  [4, 'Shakespeare Hotel', '200 Devonshire St, Surry Hills', '', '', '', '', '', 'normal'],
-  [5, 'The Clock', '470 Crown St, Surry Hills', '', '', '', '', '', 'normal'],
-  [6, 'Cricketers Arms', 'Fitzroy St, Surry Hills', '', '', '', '', '', 'normal'],
-  [7, 'The Beresford', '354 Bourke St, Surry Hills', '', '', '', '', '', 'normal']
+  [4, 'Shakespeare Hotel', '200 Devonshire St, Surry Hills', '', '', 'Fireball shot', '', '', 'normal'],
+  [5, 'The Clock', '470 Crown St, Surry Hills', '', '', 'Large red wine', '', '', 'normal'],
+  [6, 'Cricketers Arms', 'Fitzroy St, Surry Hills', '', '', 'Schooner of cider', '', '', 'normal'],
+  [7, 'The Beresford', '354 Bourke St, Surry Hills', '', '', 'Vodka raspberry, tall glass', '', '', 'normal']
 ];
 
 function setup() {
@@ -45,7 +45,7 @@ function setup() {
     holes.getRange(2, 7, COURSE.length, 1).setNumberFormat('0');
   }
   const settings = ss.getSheetByName('Settings');
-  if (settings.getLastRow() === 1) settings.getRange(2, 1, 3, 2).setValues([['missedPenalty', '3'], ['pokiesBonus', '3'], ['tiebreakOrder', '[]']]);
+  if (settings.getLastRow() === 1) settings.getRange(2, 1, 6, 2).setValues([['missedExtra', '5'], ['raceFirst', '-2'], ['raceStep', '2'], ['raceDnf', '15'], ['pokiesBonus', '3'], ['tiebreakOrder', '[]']]);
   const codes = ss.getSheetByName('Codes');
   if (codes.getLastRow() === 1) {
     const code = 'k' + Utilities.getUuid().replace(/-/g, '').slice(0, 24);
