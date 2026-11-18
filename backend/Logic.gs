@@ -99,3 +99,57 @@ function cardFlags(scores, par) {
   if (sips.length >= 3 && sips.every(s => s === sips[0])) flags.push('Everyone has the same sips');
   return flags;
 }
+
+// Seeded random so the same seed always gives the same teams.
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffle(arr, rng) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const k = Math.floor(rng() * (i + 1));
+    const tmp = arr[i]; arr[i] = arr[k]; arr[k] = tmp;
+  }
+  return arr;
+}
+
+// Together pairs are merged into groups first. Apart pairs must end up in different teams.
+function buildTeams(players, constraints, teamCount, rng) {
+  if (!(teamCount >= 1 && teamCount <= players.length)) return { error: 'Need between 1 and ' + players.length + ' teams' };
+  const parent = {};
+  players.forEach(p => { parent[p] = p; });
+  const find = p => (parent[p] === p ? p : (parent[p] = find(parent[p])));
+  const known = c => parent[c.a] != null && parent[c.b] != null;
+  constraints.filter(c => c.kind === 'together' && known(c)).forEach(c => { parent[find(c.a)] = find(c.b); });
+  const apart = constraints.filter(c => c.kind === 'apart' && known(c));
+  for (const c of apart) if (find(c.a) === find(c.b)) return { error: c.a + ' and ' + c.b + ' are set as both together and apart' };
+
+  const byRoot = {};
+  players.forEach(p => { (byRoot[find(p)] = byRoot[find(p)] || []).push(p); });
+  const groups = Object.keys(byRoot).map(k => byRoot[k]);
+  const cap = Math.ceil(players.length / teamCount);
+  for (const g of groups) if (g.length > cap) return { error: g.join(', ') + ' are too many to keep together with ' + teamCount + ' teams' };
+  const clash = (team, g) => apart.some(c => (team.indexOf(c.a) >= 0 && g.indexOf(c.b) >= 0) || (team.indexOf(c.b) >= 0 && g.indexOf(c.a) >= 0));
+
+  for (let attempt = 0; attempt < 500; attempt++) {
+    const order = shuffle(groups.slice(), rng).sort((a, b) => b.length - a.length);
+    const teams = Array.from({ length: teamCount }, () => []);
+    let ok = true;
+    for (const g of order) {
+      const options = teams.filter(t => t.length + g.length <= cap && !clash(t, g));
+      if (!options.length) { ok = false; break; }
+      const smallest = Math.min.apply(null, options.map(t => t.length));
+      const pick = shuffle(options.filter(t => t.length === smallest), rng)[0];
+      g.forEach(n => pick.push(n));
+    }
+    if (ok) return { teams };
+  }
+  return { error: 'Could not find teams that keep everyone apart who needs to be. Try a different team count.' };
+}

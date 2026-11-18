@@ -96,3 +96,29 @@ test('cards with one-sip pints or identical sips get flagged', () => {
   assert.deepEqual(j(L.cardFlags({ Ava: { sips: 1 } }, 1)), []);
   assert.deepEqual(j(L.cardFlags({ A: { sips: 3 }, B: { sips: 3 }, C: { sips: 3 }, D: { missed: true } }, 3)), ['Everyone has the same sips']);
 });
+
+const names = ['Ava', 'Ben', 'Cal', 'Dee', 'Eli', 'Fay', 'Gus', 'Hal', 'Ivy', 'Jo', 'Kit'];
+const teamOf = (teams, n) => teams.findIndex(t => t.includes(n));
+
+test('team builder keeps pairs together and apart and balances sizes', () => {
+  const rules = [{ kind: 'together', a: 'Ava', b: 'Ben' }, { kind: 'apart', a: 'Ava', b: 'Cal' }, { kind: 'apart', a: 'Dee', b: 'Eli' }];
+  for (let seed = 1; seed <= 50; seed++) {
+    const out = L.buildTeams(names, rules, 3, L.mulberry32(seed));
+    assert.ok(out.teams, out.error);
+    assert.equal(teamOf(out.teams, 'Ava'), teamOf(out.teams, 'Ben'));
+    assert.notEqual(teamOf(out.teams, 'Ava'), teamOf(out.teams, 'Cal'));
+    assert.notEqual(teamOf(out.teams, 'Dee'), teamOf(out.teams, 'Eli'));
+    const sizes = out.teams.map(t => t.length);
+    assert.ok(Math.max(...sizes) - Math.min(...sizes) <= 1);
+    assert.equal(sizes.reduce((a, b) => a + b, 0), names.length);
+  }
+});
+
+test('team builder explains impossible rules', () => {
+  assert.match(L.buildTeams(names, [{ kind: 'together', a: 'Ava', b: 'Ben' }, { kind: 'apart', a: 'Ava', b: 'Ben' }], 3, L.mulberry32(1)).error, /both together and apart/);
+  assert.match(L.buildTeams(names, [], 0, L.mulberry32(1)).error, /Need between/);
+});
+
+test('same seed gives the same teams', () => {
+  assert.deepEqual(j(L.buildTeams(names, [], 3, L.mulberry32(7))), j(L.buildTeams(names, [], 3, L.mulberry32(7))));
+});
