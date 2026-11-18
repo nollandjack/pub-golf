@@ -35,7 +35,10 @@ function teamBuilder(s, ctx) {
       out.append(box);
     });
     const save = el('button', 'btn', 'Save these teams');
-    save.onclick = async () => { if (await ctx.act('saveTeams', { teams: proposal })) { toast('Teams saved. Old team links are off, make new links below.'); ctx.draw(); } };
+    save.onclick = async () => {
+      if (!confirm('Save these teams? Old team and captain links stop working.')) return;
+      if (await ctx.act('saveTeams', { teams: proposal })) { toast('Teams saved. Old team links are off, make new links below.'); ctx.draw(); }
+    };
     out.append(el('p', 'sub', 'Saving switches off the old team and captain links. Make new ones after.'), save);
   }
   const r = el('div', 'row'); r.append(el('span', null, 'Number of teams'), count, shuffle);
@@ -98,6 +101,7 @@ function override(s, ctx) {
   const reason = el('input'); reason.placeholder = 'Reason';
   const save = el('button', 'btn', 'Save as confirmed');
   save.onclick = async () => {
+    if (!confirm('Replace this team\'s score for this hole?')) return;
     const scores = {};
     rows.querySelectorAll('input').forEach(i => { scores[i.dataset.name] = i.value === '' ? { missed: true } : { sips: Number(i.value) }; });
     if (await ctx.act('overrideCard', { team: Number(team.value), hole: Number(hole.value), scores, reason: reason.value })) toast('Saved');
@@ -113,11 +117,11 @@ function challenges(s, ctx) {
   const open = s.admin.challenges.filter(x => x.status === 'open');
   if (!open.length) c.append(el('p', 'sub', 'None open.'));
   open.forEach(x => {
-    const name = id => (s.teams.find(t => t.id === id) || {}).name;
+    const name = id => (s.teams.find(t => t.id === id) || {}).name || 'Team ' + id;
     const r = el('div', 'row');
     const up = el('button', 'btn ghost', 'Upheld'); up.onclick = async () => { if (await ctx.act('resolveChallenge', { id: x.id, outcome: 'upheld' })) { toast('Upheld. Fix the score above.'); ctx.draw(); } };
     const no = el('button', 'btn ghost', 'Dismissed'); no.onclick = async () => { if (await ctx.act('resolveChallenge', { id: x.id, outcome: 'dismissed' })) ctx.draw(); };
-    r.append(el('span', null, name(x.byTeam) + ' challenges ' + name(x.team) + ' hole ' + x.hole + ': ' + x.reason), up, no);
+    r.append(el('span', null, name(x.byTeam) + ' challenges ' + name(x.team) + ', hole ' + x.hole + '. ' + x.reason), up, no);
     c.append(r);
   });
   return c;
