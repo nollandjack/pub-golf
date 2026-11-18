@@ -3,16 +3,12 @@ import { el, face, fileToJpeg, toast } from './ui.js';
 const PENS = [['spill', 'Spill +1'], ['toilet', 'Toilet +2'], ['unfinished', 'Unfinished +3'], ['chuck', 'Chuck +5']];
 const HAZ = { 'wrong-hand': ['slip', 'Slip +1'], silent: ['word', 'Word +1'] };
 
-// True when the entry form is showing. The poll must not redraw it. Any other state redraws on each poll.
-export function liveWhen(s) {
-  const m = s.mine;
-  if (!m || m.nextHole == null) return true;
-  const hole = s.holes.find(h => h.hole === m.nextHole);
-  if (!hole || hole.kind === 'race') return true;
-  return m.cards.some(c => c.hole === hole.hole && c.status === 'pending');
-}
+// True when the last render drew the entry form. The poll must not redraw it. Any other screen redraws on each poll.
+let formShown = false;
+export function liveWhen() { return !formShown; }
 
 export function render(root, s, ctx) {
+  formShown = false;
   const m = s.mine;
   if (m.nextHole == null) { root.append(el('h2', null, 'All done'), el('p', null, 'Your team has finished the course.')); return challenges(root, s, ctx); }
   const hole = s.holes.find(h => h.hole === m.nextHole);
@@ -21,6 +17,7 @@ export function render(root, s, ctx) {
   if (hole.kind === 'race') { root.append(el('p', null, 'This is the boat race. A ref enters the times, nothing to do here.')); return challenges(root, s, ctx); }
   const waiting = m.cards.find(c => c.hole === hole.hole && c.status === 'pending');
   if (waiting) { root.append(el('p', 'card', 'Sent. Waiting for the other team or a ref to confirm.')); return challenges(root, s, ctx); }
+  formShown = true;
   const back = m.cards.filter(c => c.hole === hole.hole && c.status === 'returned').pop();
   if (back && back.note) root.append(el('p', 'flag', 'Sent back. ' + back.note));
 
