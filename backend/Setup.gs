@@ -35,6 +35,15 @@ function setup() {
       sh.setFrozenRows(1);
       // Text columns stay text so ids and JSON are never turned into numbers.
       sh.getRange(2, 1, sh.getMaxRows() - 1, TABS[name].length).setNumberFormat('@');
+    } else {
+      // Rerun on an existing Sheet: add any header that is missing at the end of row 1.
+      const have = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(String);
+      TABS[name].forEach(h => {
+        if (have.indexOf(h) < 0) {
+          sh.getRange(1, have.length + 1).setValue(h).setFontWeight('bold');
+          have.push(h);
+        }
+      });
     }
   });
   const holes = ss.getSheetByName('Holes');
@@ -45,7 +54,9 @@ function setup() {
     holes.getRange(2, 7, COURSE.length, 1).setNumberFormat('0');
   }
   const settings = ss.getSheetByName('Settings');
-  if (settings.getLastRow() === 1) settings.getRange(2, 1, 6, 2).setValues([['missedExtra', '5'], ['raceFirst', '-2'], ['raceStep', '2'], ['raceDnf', '15'], ['pokiesBonus', '3'], ['tiebreakOrder', '[]']]);
+  const settingDefaults = [['missedExtra', '5'], ['raceFirst', '-2'], ['raceStep', '2'], ['raceDnf', '15'], ['pokiesBonus', '3'], ['tiebreakOrder', '[]']];
+  const haveKeys = settings.getLastRow() > 1 ? settings.getRange(2, 1, settings.getLastRow() - 1, 1).getValues().map(r => String(r[0])) : [];
+  settingDefaults.forEach(kv => { if (haveKeys.indexOf(kv[0]) < 0) settings.appendRow(kv); });
   const codes = ss.getSheetByName('Codes');
   if (codes.getLastRow() === 1) {
     const code = 'k' + Utilities.getUuid().replace(/-/g, '').slice(0, 24);
