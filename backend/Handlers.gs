@@ -195,3 +195,47 @@ ACTIONS.renameTeam = function (req, d, who, store) {
   if (d.teams.some(t => t.id !== who.team && t.name.toLowerCase() === name.toLowerCase())) return { error: 'Another team already has that name' };
   store.update('Teams', r => Number(r.id) === who.team, { name });
 };
+
+// Boat race and pokies results. Refs or Jack only. Each post replaces the whole tab.
+function teamResults_(req, d, field) {
+  const rows = [];
+  for (const r of (req.results || [])) {
+    const team = Number(r.team), v = Number(r[field]);
+    if (!d.teams.some(t => t.id === team)) return { error: 'Unknown team ' + r.team };
+    if (!Number.isInteger(v) || v < 0) return { error: 'Numbers must be whole and not negative' };
+    if (rows.some(x => x.team === team)) return { error: 'Team ' + team + ' is in twice' };
+    const row = { team }; row[field] = v; rows.push(row);
+  }
+  return { rows };
+}
+
+ACTIONS.raceResult = function (req, d, who, store) {
+  if (who.role !== 'ref' && who.role !== 'admin') return { error: 'Only refs can enter this' };
+  const r = teamResults_(req, d, 'ms');
+  if (r.error) return r;
+  store.replace('Race', r.rows);
+};
+
+ACTIONS.pokiesResult = function (req, d, who, store) {
+  if (who.role !== 'ref' && who.role !== 'admin') return { error: 'Only refs can enter this' };
+  const r = teamResults_(req, d, 'cents');
+  if (r.error) return r;
+  store.replace('Pokies', r.rows);
+};
+
+// Team tab. Each team sees and changes only its own entries.
+ACTIONS.tabAdd = function (req, d, who, store, now) {
+  if (who.role !== 'team' && who.role !== 'captain') return { error: 'Use your team link to add costs' };
+  const members = rosterOf(d.people, who.team);
+  const payer = String(req.payer || '');
+  if (members.indexOf(payer) < 0) return { error: payer + ' is not on your team' };
+  const cents = Number(req.cents);
+  if (!Number.isInteger(cents) || cents < 1 || cents > 100000) return { error: 'Enter an amount up to $1000' };
+  const forWho = (req.forWho || []).map(String).filter((n, i, a) => members.indexOf(n) >= 0 && a.indexOf(n) === i);
+  store.append('Tab', { id: 't' + store.newId(), team: who.team, payer, venue: clean_(req.venue, 60), item: clean_(req.item, 80), cents, forWho: JSON.stringify(forWho), ts: now, deleted: false });
+};
+
+ACTIONS.tabDelete = function (req, d, who, store) {
+  if (who.role !== 'team' && who.role !== 'captain') return { error: 'Use your team link' };
+  if (!store.update('Tab', r => String(r.id) === String(req.id) && Number(r.team) === who.team, { deleted: true })) return { error: 'That entry was not found' };
+};

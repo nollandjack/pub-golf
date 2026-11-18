@@ -111,3 +111,35 @@ test('captain renames their team', () => {
 test('inherited object properties are not actions', () => {
   assert.equal(post(fresh(), '', 'toString', {}).ok, false);
 });
+
+test('ref enters race times and pokies, board applies both', () => {
+  const store = fresh();
+  const results = [1, 2, 3, 4].map(team => ({ team, ms: 10000 + team * 1000 }));
+  assert.match(post(store, 'kcap1', 'raceResult', { results }).error, /Only refs/);
+  assert.equal(post(store, 'kref', 'raceResult', { results }).ok, true);
+  assert.equal(post(store, 'kref', 'pokiesResult', { results: [1, 2, 3, 4].map(team => ({ team, cents: team === 3 ? 6000 : 1000 })) }).ok, true);
+  const b = get(store, '').board;
+  assert.equal(b.find(r => r.team === 1).byHole[3], 1);
+  assert.equal(b.find(r => r.team === 3).byHole[3], 0);
+  assert.match(post(store, 'kref', 'raceResult', { results: [{ team: 9, ms: 5 }] }).error, /Unknown team/);
+});
+
+test('team tab adds, splits and deletes within the team', () => {
+  const store = fresh();
+  assert.equal(post(store, 'kteam1', 'tabAdd', { payer: 'Ava', venue: 'Royal Hotel', item: 'Espresso martinis', cents: 6000, forWho: [] }).ok, true);
+  assert.equal(post(store, 'kcap1', 'tabAdd', { payer: 'Ben', venue: 'Uber', item: 'To Surry Hills', cents: 3000, forWho: ['Ben', 'Cal'] }).ok, true);
+  const tab = get(store, 'kteam1').tab;
+  assert.equal(tab.entries.length, 2);
+  assert.deepEqual(tab.settle.balances, { Ava: 4000, Ben: -500, Cal: -3500 });
+  assert.match(post(store, 'kteam1', 'tabAdd', { payer: 'Dee', venue: 'x', item: 'y', cents: 100, forWho: [] }).error, /not on your team/);
+  assert.match(post(store, 'kteam2', 'tabDelete', { id: tab.entries[0].id }).error, /not found/);
+  assert.equal(post(store, 'kteam1', 'tabDelete', { id: tab.entries[0].id }).ok, true);
+  assert.equal(get(store, 'kteam1').tab.entries.length, 1);
+  assert.equal(get(store, 'kteam2').tab.entries.length, 0);
+});
+
+test('tab split ignores repeated names in forWho', () => {
+  const store = fresh();
+  assert.equal(post(store, 'kteam1', 'tabAdd', { payer: 'Ava', venue: 'Pub', item: 'Round', cents: 3000, forWho: ['Ben', 'Ben'] }).ok, true);
+  assert.deepEqual(get(store, 'kteam1').tab.settle.balances, { Ava: 3000, Ben: -3000, Cal: 0 });
+});
