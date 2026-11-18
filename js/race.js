@@ -2,12 +2,12 @@ import { el, clock, money, toast } from './ui.js';
 
 export function render(root, s, ctx) {
   root.append(el('h2', null, 'Boat race'));
-  const times = {};
-  s.race.forEach(r => { times[r.team] = r.ms; });
+  const times = {}, dnfSaved = {};
+  s.race.forEach(r => { times[r.team] = r.ms; dnfSaved[r.team] = !!r.dnf; });
   let start = null, timer = null;
   const big = el('div', 'big', '0:00.0');
   const go = el('button', 'btn', 'Start');
-  const boxes = {}, taps = {};
+  const boxes = {}, taps = {}, dnfs = {};
   // Accepts m:ss, m:ss.s or plain seconds. Returns whole ms, or null if empty or unreadable.
   function parseTime(v) {
     v = String(v || '').trim();
@@ -17,9 +17,9 @@ export function render(root, s, ctx) {
     return Math.round(((m[1] ? Number(m[1]) * 60 : 0) + Number(m[2])) * 1000);
   }
   go.onclick = () => {
-    if (s.teams.some(t => boxes[t.id].value.trim() !== '') && !confirm('Restart the race and clear the times?')) return;
+    if (s.teams.some(t => boxes[t.id].value.trim() !== '' || dnfs[t.id].checked) && !confirm('Restart the race and clear the times?')) return;
     start = performance.now();
-    s.teams.forEach(t => { boxes[t.id].value = ''; });
+    s.teams.forEach(t => { boxes[t.id].value = ''; dnfs[t.id].checked = false; });
     clearInterval(timer); timer = setInterval(() => {
       if (!big.isConnected) { clearInterval(timer); return; }
       big.textContent = clock(performance.now() - start);
@@ -28,8 +28,11 @@ export function render(root, s, ctx) {
   };
   const list = el('div');
   function sync() {
-    s.teams.forEach(t => { taps[t.id].disabled = start == null || boxes[t.id].value.trim() !== ''; });
-    if (start != null && s.teams.every(t => boxes[t.id].value.trim() !== '')) clearInterval(timer);
+    s.teams.forEach(t => {
+      boxes[t.id].disabled = dnfs[t.id].checked;
+      taps[t.id].disabled = start == null || dnfs[t.id].checked || boxes[t.id].value.trim() !== '';
+    });
+    if (start != null && s.teams.every(t => dnfs[t.id].checked || boxes[t.id].value.trim() !== '')) clearInterval(timer);
   }
   s.teams.forEach(t => {
     const box = el('input'); box.type = 'text'; box.inputMode = 'decimal'; box.placeholder = 'm:ss.s'; box.style.width = '90px';
@@ -37,20 +40,26 @@ export function render(root, s, ctx) {
     box.oninput = sync;
     const b = el('button', 'btn', 'Done');
     b.onclick = () => { box.value = clock(Math.round(performance.now() - start)); sync(); };
-    boxes[t.id] = box; taps[t.id] = b;
-    const r = el('div', 'row'); r.append(el('strong', null, t.name), box, b); list.append(r);
+    const dnfBox = el('input'); dnfBox.type = 'checkbox'; dnfBox.checked = !!dnfSaved[t.id];
+    dnfBox.setAttribute('aria-label', 'Did not finish, ' + t.name);
+    dnfBox.onchange = sync;
+    dnfBox.style.width = 'auto';
+    const dnfLabel = el('label', null, 'DNF'); dnfLabel.style.cssText = 'display:inline-flex;gap:4px;align-items:center;margin:0'; dnfLabel.prepend(dnfBox);
+    boxes[t.id] = box; taps[t.id] = b; dnfs[t.id] = dnfBox;
+    const r = el('div', 'row'); r.append(el('strong', null, t.name), box, b, dnfLabel); list.append(r);
   });
   sync();
   const save = el('button', 'btn', 'Save race result');
   save.onclick = async () => {
     const results = [];
     for (const t of s.teams) {
+      if (dnfs[t.id].checked) { results.push({ team: t.id, dnf: true }); continue; }
       const ms = parseTime(boxes[t.id].value);
       if (Number.isNaN(ms)) { toast('Check the time for ' + t.name + '. Use m:ss or seconds.'); return; }
       if (ms != null) results.push({ team: t.id, ms });
     }
     if (!results.length) { toast('Enter at least one team'); return; }
-    if (results.length < s.teams.length && !confirm('Not every team has a time. Save anyway?')) return;
+    if (results.length < s.teams.length && !confirm('Not every team has a time or a DNF. Save anyway?')) return;
     if (await ctx.act('raceResult', { results })) toast('Race saved');
   };
   const rc = el('div', 'card'); rc.append(big, go, list, save); root.append(rc);

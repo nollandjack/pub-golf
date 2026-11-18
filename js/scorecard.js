@@ -13,7 +13,7 @@ export function render(root, s, ctx) {
   if (m.nextHole == null) { root.append(el('h2', null, 'All done'), el('p', null, 'Your team has finished the course.')); return challenges(root, s, ctx); }
   const hole = s.holes.find(h => h.hole === m.nextHole);
   root.append(el('h2', null, 'Hole ' + hole.hole + ', ' + hole.name));
-  root.append(el('p', 'sub', (hole.drink || 'Drink') + (hole.par ? ', par ' + hole.par : '')));
+  root.append(el('p', 'sub', hole.drink || 'Drink'));
   if (hole.kind === 'race') { root.append(el('p', null, 'This is the boat race. A ref enters the times, nothing to do here.')); return challenges(root, s, ctx); }
   const waiting = m.cards.find(c => c.hole === hole.hole && c.status === 'pending');
   if (waiting) { root.append(el('p', 'card', 'Sent. Waiting for the other team or a ref to confirm.')); return challenges(root, s, ctx); }

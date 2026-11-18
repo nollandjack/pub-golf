@@ -7,7 +7,7 @@ export function render(root, s, ctx) {
   if (!s.queue.length) { root.append(el('p', 'sub', 'Nothing waiting. This page checks again every 30 seconds.')); return; }
   s.queue.forEach(q => {
     const c = el('div', 'card');
-    c.append(el('h3', null, q.teamName + ', hole ' + q.hole + ' (par ' + q.par + ')'));
+    c.append(el('h3', null, q.teamName + ', hole ' + q.hole + (q.drink ? ', ' + q.drink : '')));
     q.flags.forEach(f => c.append(el('p', 'flag', f)));
     Object.keys(q.scores).forEach(name => {
       const e = q.scores[name];

@@ -15,7 +15,6 @@ export function toast(msg) {
 }
 
 export const money = c => (c < 0 ? '-' : '') + '$' + (Math.abs(c) / 100).toFixed(2);
-export const toPar = n => (n === 0 ? 'E' : (n > 0 ? '+' : '') + n);
 export function clock(ms) {
   const s = ms / 1000, m = Math.floor(s / 60);
   return m + ':' + (s - m * 60).toFixed(1).padStart(4, '0');

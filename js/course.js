@@ -20,7 +20,7 @@ export function render(root, s) {
     const c = el('div', 'card');
     c.append(el('h3', null, h.hole + '. ' + h.name));
     c.append(el('p', 'sub', h.address));
-    c.append(el('p', null, (h.drink || 'Drink to be announced') + (h.par ? ', par ' + h.par : '')));
+    c.append(el('p', null, (h.drink || 'Drink to be announced')));
     if (h.kind === 'race') c.append(el('p', 'pill', 'Boat race and pokies'));
     if (h.hazard) c.append(el('p', 'flag', HAZARD[h.hazard] || h.hazard));
     if (h.hole === 3) c.append(el('p', 'sub', 'Then the L2 light rail from Randwick to the Surry Hills stop, about 15 minutes.'));
