@@ -31,6 +31,7 @@ function raceRanks(rows) {
 function pokiesWinners(rows) {
   if (!rows.length) return [];
   const top = Math.max.apply(null, rows.map(r => r.cents));
+  if (!(top > 0)) return [];
   return rows.filter(r => r.cents === top).map(r => r.team);
 }
 

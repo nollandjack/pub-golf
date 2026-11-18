@@ -70,3 +70,7 @@ test('finished level teams are tied until a tie-break order is set', () => {
   board = L.leaderboard(base({ cards: all, race, settings: { missedPenalty: 3, pokiesBonus: 3, tiebreakOrder: [2, 1] } }));
   assert.equal(board[0].team, 2); assert.equal(board[0].tied, false); assert.equal(board[1].rank, 2);
 });
+
+test('pokies bonus needs more than $0 (all-zero top means no winners)', () => {
+  assert.deepEqual(j(L.pokiesWinners([{ team: 1, cents: 0 }, { team: 2, cents: 0 }])), []);
+});
