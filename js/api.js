@@ -1,6 +1,6 @@
 const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
-// Replaced with the Apps Script web app URL in Task 16.
-const REMOTE = 'https://script.google.com/macros/s/DEPLOYMENT_ID/exec';
+// Apps Script web app. Update the code with: clasp push, then clasp update-deployment AKfycbxaCR9rW8z-ZJMC02mugdaMAF5UFjZfjuNq5f7gmiI40dFeBGQGouB7TdGAZx75SFFYmA
+const REMOTE = 'https://script.google.com/macros/s/AKfycbxaCR9rW8z-ZJMC02mugdaMAF5UFjZfjuNq5f7gmiI40dFeBGQGouB7TdGAZx75SFFYmA/exec';
 export const API = LOCAL ? '/api' : REMOTE;
 
 function lsGet(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }
